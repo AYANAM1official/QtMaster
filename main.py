@@ -447,10 +447,22 @@ class MainWindow(QMainWindow):
         # 1. 串口设置
         setting_box = QGroupBox("串口设置")
         setting_layout = QVBoxLayout()
+        setting_layout.addWidget(QLabel("端口:"))
+        
+        # 端口选择和刷新按钮组合
+        port_layout = QHBoxLayout()
         self.combo_ports = QComboBox()
         self.refresh_ports()
-        setting_layout.addWidget(QLabel("端口:"))
-        setting_layout.addWidget(self.combo_ports)
+        port_layout.addWidget(self.combo_ports, 3)
+        
+        self.btn_refresh_ports = QPushButton("🔄")
+        self.btn_refresh_ports.setMaximumWidth(40)
+        self.btn_refresh_ports.setToolTip("刷新串口列表")
+        self.btn_refresh_ports.clicked.connect(self.refresh_ports)
+        port_layout.addWidget(self.btn_refresh_ports, 0)
+        
+        setting_layout.addLayout(port_layout)
+        
         self.combo_baud = QComboBox()
         self.combo_baud.addItems(["9600", "115200"])
         self.combo_baud.setCurrentText("115200")
@@ -625,16 +637,30 @@ class MainWindow(QMainWindow):
     def refresh_ports(self):
         self.combo_ports.clear()
         ports = serial.tools.list_ports.comports()
-        if not ports: self.combo_ports.addItem("无可用串口")
+        if not ports:
+            self.combo_ports.addItem("无可用串口")
+            # 只有在log_text存在时才输出日志
+            if hasattr(self, 'log_text'):
+                self.append_log("⚠️ 未检测到任何串口设备")
+                self.append_log("请检查：1) USB设备是否插好 2) 驱动是否安装")
         else:
-            for p in ports: self.combo_ports.addItem(f"{p.device}")
+            for p in ports:
+                # 显示格式: COM端口 - 设备描述
+                display_text = f"{p.device} - {p.description}"
+                self.combo_ports.addItem(display_text)
+                if hasattr(self, 'log_text'):
+                    self.append_log(f"✓ 发现串口: {p.device} ({p.description})")
+            if hasattr(self, 'log_text'):
+                self.append_log(f"共检测到 {len(ports)} 个串口设备")
 
     def toggle_serial(self):
         if self.btn_connect.isChecked():
-            port = self.combo_ports.currentText()
-            if not port or "无" in port:
+            port_text = self.combo_ports.currentText()
+            if not port_text or "无" in port_text:
                 self.btn_connect.setChecked(False)
                 return
+            # 从显示文本中提取COM端口号 (格式: "COM10 - USB Serial Port")
+            port = port_text.split(' - ')[0].strip() if ' - ' in port_text else port_text
             baud = int(self.combo_baud.currentText())
             self.worker.start_serial(port, baud)
         else:
